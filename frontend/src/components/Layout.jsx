@@ -24,9 +24,8 @@ export default function Layout() {
         </div>
         <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {[
-            { to: '/', icon: '📊', label: 'Dashboard', end: true },
-            { to: '/gastos', icon: '📋', label: 'Mis Gastos' },
-            { to: '/proyeccion', icon: '📅', label: 'Proyección' },
+            { to: '/', icon: '📊', label: 'Mis Gastos', end: true },
+            { to: '/gastos', icon: '📋', label: 'Historial' },
             { to: '/chat', icon: '🤖', label: 'Chat IA' },
             ...(user.rol === 'admin' ? [{ to: '/admin', icon: '⚙️', label: 'Administración' }] : [])
           ].map(item => (

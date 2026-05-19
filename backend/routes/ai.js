@@ -34,39 +34,75 @@ Tu trabajo es ayudar al usuario a registrar, consultar y analizar sus gastos.
 CATEGORÍAS DISPONIBLES (id: nombre):
 ${categoriasStr}
 
-Cuando el usuario mencione un gasto, extraé la información y respondé con JSON en este formato EXACTO (sin texto adicional antes o después del JSON, solo el JSON):
+---
+ACCIONES DISPONIBLES - Respondé SIEMPRE con JSON puro (sin texto antes ni después):
+
+### 1. GASTO PUNTUAL (un solo mes, ya ocurrió o va a ocurrir una vez):
 {
   "accion": "registrar_gastos",
   "gastos": [
     {
-      "descripcion": "descripción clara del gasto",
+      "descripcion": "descripción clara",
       "monto": 1500.00,
       "moneda": "ARS",
       "categoria_id": 1,
       "fecha": "2026-05-19",
-      "notas": "nota opcional"
+      "notas": "opcional"
     }
   ],
-  "mensaje": "Mensaje amigable confirmando lo registrado"
+  "mensaje": "Confirmación amigable"
 }
 
-Cuando el usuario pregunte por sus gastos, resúmenes o estadísticas, respondé con:
+### 2. GASTO EN CUOTAS o GASTO FIJO MENSUAL (alquiler, servicios, cuotas de tarjeta):
 {
-  "accion": "consulta",
-  "mensaje": "Tu respuesta aquí con la información solicitada"
+  "accion": "registrar_recurrente",
+  "recurrentes": [
+    {
+      "descripcion": "descripción",
+      "monto": 20250.00,
+      "moneda": "ARS",
+      "categoria_id": 10,
+      "tipo": "cuota",
+      "cuota_actual": 3,
+      "cuota_total": 12,
+      "mes_referencia": "2026-05"
+    }
+  ],
+  "mensaje": "Confirmación"
+}
+Para gastos fijos mensuales (alquiler, luz, internet, gym, sueldo de empleada, etc.) usá tipo "fijo" y omitir campos de cuota.
+
+### 3. INGRESO MENSUAL (sueldo, freelance, renta, etc.):
+{
+  "accion": "registrar_ingreso",
+  "ingresos": [
+    {
+      "descripcion": "Sueldo",
+      "monto": 2400000.00,
+      "moneda": "ARS"
+    }
+  ],
+  "mensaje": "Confirmación"
 }
 
-Cuando el usuario haga preguntas generales que no son sobre gastos, respondé con:
+### 4. CONSULTA O PREGUNTA GENERAL:
 {
   "accion": "consulta",
   "mensaje": "Tu respuesta aquí"
 }
 
-REGLAS:
-- La moneda por defecto es ARS (pesos argentinos). Si mencionan dólares, USD, u$s o US$, usá "USD".
-- Si no se menciona fecha, usá la fecha de hoy: ${new Date().toISOString().split('T')[0]}
-- Detectá automáticamente la categoría más apropiada según la descripción
-- Si hay múltiples gastos en un mensaje, incluílos todos en el array "gastos"
+---
+REGLAS IMPORTANTES:
+- Moneda por defecto: ARS. Si dicen dólares/USD/u$s/US$ → "USD"
+- Fecha por defecto: hoy ${new Date().toISOString().split('T')[0]}
+- mes_referencia: el mes en que se está pagando la cuota_actual (formato YYYY-MM)
+- Si el usuario menciona cuotas pero NO dice cuál cuota va ni el total, PREGUNTALE antes de registrar: "¿En qué cuota estás actualmente y cuántas cuotas son en total? (ej: cuota 3 de 12)"
+- Si hay múltiples gastos en un mensaje, incluílos todos en el array
+- Detectá automáticamente la categoría más apropiada
+- Cuando te pasen un resumen de tarjeta de crédito, analizá CADA item:
+  * Si tiene formato X/Y (ej: 14/24) → tipo "cuota" con cuota_actual=X, cuota_total=Y
+  * Si es un gasto fijo → tipo "fijo"
+  * Agrupá todos los recurrentes en una sola respuesta "registrar_recurrente"
 - Siempre respondé en español rioplatense (vos, sos, etc.)
 - Los montos siempre deben ser números positivos`;
 
@@ -75,7 +111,6 @@ router.post('/chat', async (req, res) => {
   const { mensaje } = req.body;
   if (!mensaje) return res.status(400).json({ error: 'Mensaje requerido' });
 
-  // Historial reciente (últimos 10 mensajes)
   const historial = db.prepare(
     `SELECT rol, contenido FROM chat_mensajes WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`
   ).all(req.user.id).reverse();
@@ -91,12 +126,11 @@ router.post('/chat', async (req, res) => {
       model: 'gpt-4o',
       messages,
       temperature: 0.3,
-      max_tokens: 1500
+      max_tokens: 2000
     });
 
     const respuestaRaw = completion.choices[0].message.content;
 
-    // Guardar en historial
     db.prepare('INSERT INTO chat_mensajes (user_id, rol, contenido) VALUES (?, ?, ?)').run(req.user.id, 'user', mensaje);
     db.prepare('INSERT INTO chat_mensajes (user_id, rol, contenido) VALUES (?, ?, ?)').run(req.user.id, 'assistant', respuestaRaw);
 
@@ -108,8 +142,11 @@ router.post('/chat', async (req, res) => {
       parsedResponse = { accion: 'consulta', mensaje: respuestaRaw };
     }
 
-    // Si hay gastos para registrar, insertarlos
     const gastosRegistrados = [];
+    const recurrentesRegistrados = [];
+    const ingresosRegistrados = [];
+
+    // Gasto puntual
     if (parsedResponse.accion === 'registrar_gastos' && Array.isArray(parsedResponse.gastos)) {
       for (const gasto of parsedResponse.gastos) {
         if (!gasto.monto || !gasto.descripcion) continue;
@@ -133,10 +170,49 @@ router.post('/chat', async (req, res) => {
       }
     }
 
+    // Gasto recurrente o cuota
+    if (parsedResponse.accion === 'registrar_recurrente' && Array.isArray(parsedResponse.recurrentes)) {
+      for (const r of parsedResponse.recurrentes) {
+        if (!r.monto || !r.descripcion) continue;
+        const result = db.prepare(
+          `INSERT INTO gastos_recurrentes (user_id, descripcion, monto, moneda, categoria_id, tipo, cuota_actual, cuota_total, mes_referencia)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          req.user.id,
+          r.descripcion,
+          parseFloat(r.monto),
+          r.moneda || 'ARS',
+          r.categoria_id || null,
+          r.tipo || 'fijo',
+          r.cuota_actual || null,
+          r.cuota_total || null,
+          r.mes_referencia || null
+        );
+        const item = db.prepare(
+          `SELECT rec.*, c.nombre as categoria_nombre, c.icono as categoria_icono
+           FROM gastos_recurrentes rec LEFT JOIN categorias c ON c.id = rec.categoria_id WHERE rec.id = ?`
+        ).get(result.lastInsertRowid);
+        recurrentesRegistrados.push(item);
+      }
+    }
+
+    // Ingreso mensual
+    if (parsedResponse.accion === 'registrar_ingreso' && Array.isArray(parsedResponse.ingresos)) {
+      for (const i of parsedResponse.ingresos) {
+        if (!i.monto || !i.descripcion) continue;
+        const result = db.prepare(
+          'INSERT INTO ingresos_recurrentes (user_id, descripcion, monto, moneda) VALUES (?, ?, ?, ?)'
+        ).run(req.user.id, i.descripcion, parseFloat(i.monto), i.moneda || 'ARS');
+        ingresosRegistrados.push(db.prepare('SELECT * FROM ingresos_recurrentes WHERE id = ?').get(result.lastInsertRowid));
+      }
+    }
+
     res.json({
       mensaje: parsedResponse.mensaje || respuestaRaw,
       accion: parsedResponse.accion,
-      gastosRegistrados
+      gastosRegistrados,
+      recurrentesRegistrados,
+      ingresosRegistrados
     });
   } catch (err) {
     console.error('Error OpenAI:', err.message);
@@ -156,16 +232,14 @@ router.post('/upload', upload.single('archivo'), async (req, res) => {
       const data = await pdfParse(buffer);
       textoExtraido = data.text;
     } else if (req.file.mimetype.startsWith('image/')) {
-      // Usar vision de OpenAI para imágenes
       const imageBuffer = fs.readFileSync(req.file.path);
       const base64 = imageBuffer.toString('base64');
-
       const visionResponse = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [{
           role: 'user',
           content: [
-            { type: 'text', text: 'Extraé todo el texto de esta imagen de resumen de tarjeta o ticket de gastos. Devolvé solo el texto extraído.' },
+            { type: 'text', text: 'Extraé todo el texto de esta imagen de resumen de tarjeta o ticket. Devolvé solo el texto.' },
             { type: 'image_url', image_url: { url: `data:${req.file.mimetype};base64,${base64}` } }
           ]
         }],
@@ -176,36 +250,53 @@ router.post('/upload', upload.single('archivo'), async (req, res) => {
       textoExtraido = fs.readFileSync(req.file.path, 'utf8');
     }
 
-    // Limpiar archivo temporal
     fs.unlinkSync(req.file.path);
 
     if (!textoExtraido.trim()) {
       return res.status(400).json({ error: 'No se pudo extraer texto del archivo' });
     }
 
-    // Analizar gastos con GPT-4o
-    const prompt = `Analizá este resumen de tarjeta/ticket y extraé TODOS los gastos como JSON:
+    const mesActual = new Date().toISOString().slice(0, 7);
 
+    const prompt = `Analizá este resumen de tarjeta/ticket y extraé TODOS los gastos.
+Para cada item determiná si es una cuota (tiene formato X/Y o similar) o un gasto puntual.
+
+TEXTO:
 ${textoExtraido.slice(0, 8000)}
 
-Respondé SOLO con JSON en este formato:
+Respondé SOLO con este JSON:
 {
-  "gastos": [
+  "recurrentes": [
     {
-      "descripcion": "descripción del comercio/gasto",
-      "monto": 1500.00,
+      "descripcion": "nombre del item",
+      "monto": 20250.00,
       "moneda": "ARS",
       "categoria_id": 10,
-      "fecha": "2026-05-15",
-      "notas": "cuota 1/3 o nota relevante"
+      "tipo": "cuota",
+      "cuota_actual": 14,
+      "cuota_total": 24,
+      "mes_referencia": "${mesActual}"
     }
   ],
-  "resumen": "Resumen breve: X gastos, total aproximado"
+  "gastosUnicos": [
+    {
+      "descripcion": "compra puntual",
+      "monto": 5000.00,
+      "moneda": "ARS",
+      "categoria_id": 1,
+      "fecha": "${new Date().toISOString().split('T')[0]}",
+      "notas": ""
+    }
+  ],
+  "resumen": "X cuotas cargadas, Y gastos puntuales"
 }
 
-CATEGORÍAS: ${categoriasStr}
-Para gastos de tarjeta de crédito usá categoria_id=10.
-La moneda es ARS a menos que sea obvio que es USD.`;
+REGLAS:
+- Si el item tiene formato "X/Y" (ej: 14/24, 3/12) → tipo "cuota" con cuota_actual=X, cuota_total=Y
+- Gastos fijos sin cuotas (alquiler, servicios) → tipo "fijo" sin campos de cuota
+- Para gastos de tarjeta sin info de cuotas → gastosUnicos
+- CATEGORÍAS: ${categoriasStr}
+- cuota_actual=1 para cuotas si no se especifica cuál va`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -226,35 +317,43 @@ La moneda es ARS a menos que sea obvio que es USD.`;
       return res.status(500).json({ error: 'Error al parsear respuesta de IA' });
     }
 
-    // Insertar gastos extraídos
+    const recurrentesInsertados = [];
     const gastosInsertados = [];
-    if (Array.isArray(parsed.gastos)) {
-      for (const gasto of parsed.gastos) {
+
+    if (Array.isArray(parsed.recurrentes)) {
+      for (const r of parsed.recurrentes) {
+        if (!r.monto || !r.descripcion) continue;
+        const result = db.prepare(
+          `INSERT INTO gastos_recurrentes (user_id, descripcion, monto, moneda, categoria_id, tipo, cuota_actual, cuota_total, mes_referencia)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          req.user.id, r.descripcion, parseFloat(r.monto), r.moneda || 'ARS',
+          r.categoria_id || 10, r.tipo || 'cuota',
+          r.cuota_actual || null, r.cuota_total || null, r.mes_referencia || null
+        );
+        recurrentesInsertados.push(db.prepare('SELECT * FROM gastos_recurrentes WHERE id = ?').get(result.lastInsertRowid));
+      }
+    }
+
+    if (Array.isArray(parsed.gastosUnicos)) {
+      for (const gasto of parsed.gastosUnicos) {
         if (!gasto.monto || !gasto.descripcion) continue;
         const result = db.prepare(
           `INSERT INTO gastos (user_id, descripcion, monto, moneda, categoria_id, fecha, notas, origen)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'archivo')`
         ).run(
-          req.user.id,
-          gasto.descripcion,
-          parseFloat(gasto.monto),
-          gasto.moneda || 'ARS',
-          gasto.categoria_id || 10,
-          gasto.fecha || new Date().toISOString().split('T')[0],
+          req.user.id, gasto.descripcion, parseFloat(gasto.monto), gasto.moneda || 'ARS',
+          gasto.categoria_id || null, gasto.fecha || new Date().toISOString().split('T')[0],
           gasto.notas || null
         );
-        const g = db.prepare(
-          `SELECT g.*, c.nombre as categoria_nombre, c.icono as categoria_icono
-           FROM gastos g LEFT JOIN categorias c ON c.id = g.categoria_id WHERE g.id = ?`
-        ).get(result.lastInsertRowid);
-        gastosInsertados.push(g);
+        gastosInsertados.push(db.prepare('SELECT * FROM gastos WHERE id = ?').get(result.lastInsertRowid));
       }
     }
 
     res.json({
+      recurrentesInsertados,
       gastosInsertados,
-      resumen: parsed.resumen || `Se encontraron ${gastosInsertados.length} gastos`,
-      totalGastos: gastosInsertados.length
+      resumen: parsed.resumen || `${recurrentesInsertados.length} recurrentes, ${gastosInsertados.length} gastos puntuales`,
     });
   } catch (err) {
     if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -263,7 +362,6 @@ La moneda es ARS a menos que sea obvio que es USD.`;
   }
 });
 
-// Obtener historial de chat
 router.get('/historial', (req, res) => {
   const mensajes = db.prepare(
     `SELECT rol, contenido, created_at FROM chat_mensajes WHERE user_id = ? ORDER BY created_at ASC LIMIT 100`
@@ -271,7 +369,6 @@ router.get('/historial', (req, res) => {
   res.json(mensajes);
 });
 
-// Limpiar historial de chat
 router.delete('/historial', (req, res) => {
   db.prepare('DELETE FROM chat_mensajes WHERE user_id = ?').run(req.user.id);
   res.json({ ok: true });

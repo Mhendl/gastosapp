@@ -18,21 +18,21 @@ function monthDiff(fromYYYYMM, toYYYYMM) {
 }
 
 router.get('/', (req, res) => {
-  const meses = Math.min(parseInt(req.query.meses) || 6, 24);
+  const meses = Math.min(parseInt(req.query.meses) || 12, 24);
   const userId = req.user.id;
 
   const now = new Date();
   const mesActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  const gastos = db.prepare(
-    `SELECT r.*, c.nombre as categoria_nombre, c.icono as categoria_icono
+  const recurrentes = db.prepare(
+    `SELECT r.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
      FROM gastos_recurrentes r
      LEFT JOIN categorias c ON c.id = r.categoria_id
      WHERE r.user_id = ? AND r.activo = 1`
   ).all(userId);
 
   const ingresos = db.prepare(
-    'SELECT * FROM ingresos_recurrentes WHERE user_id = ? AND activo = 1'
+    'SELECT * FROM ingresos_recurrentes WHERE user_id = ? AND activo = 1 ORDER BY descripcion'
   ).all(userId);
 
   const proyeccion = [];
@@ -40,7 +40,8 @@ router.get('/', (req, res) => {
   for (let i = 0; i < meses; i++) {
     const mes = addMonths(mesActual, i);
 
-    const gastosDelMes = gastos.reduce((acc, g) => {
+    // Gastos recurrentes activos este mes
+    const recurrentesDelMes = recurrentes.reduce((acc, g) => {
       if (g.tipo === 'fijo') {
         acc.push({ ...g });
         return acc;
@@ -55,24 +56,40 @@ router.get('/', (req, res) => {
       return acc;
     }, []);
 
-    const totalARS = gastosDelMes.filter(g => g.moneda === 'ARS').reduce((s, g) => s + g.monto, 0);
-    const totalUSD = gastosDelMes.filter(g => g.moneda === 'USD').reduce((s, g) => s + g.monto, 0);
-    const ingresoARS = ingresos.filter(i => i.moneda === 'ARS').reduce((s, i) => s + i.monto, 0);
-    const ingresoUSD = ingresos.filter(i => i.moneda === 'USD').reduce((s, i) => s + i.monto, 0);
+    // Gastos registrados (uno a uno) para este mes
+    const gastosRegistrados = db.prepare(
+      `SELECT g.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
+       FROM gastos g LEFT JOIN categorias c ON c.id = g.categoria_id
+       WHERE g.user_id = ? AND strftime('%Y-%m', g.fecha) = ?
+       ORDER BY g.fecha DESC`
+    ).all(userId, mes);
+
+    const recARS = recurrentesDelMes.filter(g => g.moneda === 'ARS').reduce((s, g) => s + g.monto, 0);
+    const recUSD = recurrentesDelMes.filter(g => g.moneda === 'USD').reduce((s, g) => s + g.monto, 0);
+    const regARS = gastosRegistrados.filter(g => g.moneda === 'ARS').reduce((s, g) => s + g.monto, 0);
+    const regUSD = gastosRegistrados.filter(g => g.moneda === 'USD').reduce((s, g) => s + g.monto, 0);
+    const ingARS = ingresos.filter(i => i.moneda === 'ARS').reduce((s, i) => s + i.monto, 0);
+    const ingUSD = ingresos.filter(i => i.moneda === 'USD').reduce((s, i) => s + i.monto, 0);
 
     proyeccion.push({
       mes,
-      gastos: gastosDelMes,
-      totalARS,
-      totalUSD,
-      ingresoARS,
-      ingresoUSD,
-      balanceARS: ingresoARS - totalARS,
-      balanceUSD: ingresoUSD - totalUSD
+      recurrentes: recurrentesDelMes,
+      gastosRegistrados,
+      ingresos,
+      totalRecARS: recARS,
+      totalRecUSD: recUSD,
+      totalRegARS: regARS,
+      totalRegUSD: regUSD,
+      totalARS: recARS + regARS,
+      totalUSD: recUSD + regUSD,
+      ingresoARS: ingARS,
+      ingresoUSD: ingUSD,
+      balanceARS: ingARS - (recARS + regARS),
+      balanceUSD: ingUSD - (recUSD + regUSD),
     });
   }
 
-  res.json({ proyeccion, gastos, ingresos });
+  res.json({ proyeccion, recurrentes, ingresos });
 });
 
 module.exports = router;
