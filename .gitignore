@@ -1,0 +1,10 @@
+node_modules/
+backend/.env
+backend/db/gastos.db
+backend/db/*.db-shm
+backend/db/*.db-wal
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.log
+dist/
+.DS_Store
