@@ -3,7 +3,6 @@ const db = require('../db/database');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
-
 router.use(authMiddleware);
 
 // Listar gastos del usuario con filtros
@@ -62,15 +61,21 @@ router.get('/resumen', (req, res) => {
 
 // Crear gasto manual
 router.post('/', (req, res) => {
-  const { descripcion, monto, moneda = 'ARS', categoria_id, fecha, notas } = req.body;
+  const { descripcion, monto, moneda = 'ARS', categoria_id, fecha, notas, origen } = req.body;
   if (!descripcion || !monto) {
     return res.status(400).json({ error: 'Descripción y monto requeridos' });
   }
 
   const result = db.prepare(
     `INSERT INTO gastos (user_id, descripcion, monto, moneda, categoria_id, fecha, notas, origen)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')`
-  ).run(req.user.id, descripcion, parseFloat(monto), moneda, categoria_id || null, fecha || new Date().toISOString().split('T')[0], notas || null);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    req.user.id, descripcion, parseFloat(monto), moneda,
+    categoria_id || null,
+    fecha || new Date().toISOString().split('T')[0],
+    notas || null,
+    origen || 'manual'
+  );
 
   const gasto = db.prepare(
     `SELECT g.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
@@ -98,14 +103,31 @@ router.put('/:id', (req, res) => {
     req.params.id
   );
 
-  res.json({ ok: true });
+  const actualizado = db.prepare(
+    `SELECT g.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
+     FROM gastos g LEFT JOIN categorias c ON c.id = g.categoria_id WHERE g.id = ?`
+  ).get(req.params.id);
+  res.json(actualizado);
 });
 
-// Eliminar gasto
+// Eliminar gasto único
 router.delete('/:id', (req, res) => {
   const result = db.prepare('DELETE FROM gastos WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
   if (result.changes === 0) return res.status(404).json({ error: 'Gasto no encontrado' });
   res.json({ ok: true });
+});
+
+// Eliminar varios gastos a la vez
+router.post('/bulk-delete', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Se requiere un array de ids' });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  const result = db.prepare(
+    `DELETE FROM gastos WHERE user_id = ? AND id IN (${placeholders})`
+  ).run(req.user.id, ...ids);
+  res.json({ ok: true, eliminados: result.changes });
 });
 
 // Listar categorías

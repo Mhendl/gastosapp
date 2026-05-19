@@ -66,6 +66,18 @@ router.delete('/gastos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+router.post('/gastos/bulk-delete', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Se requiere un array de ids' });
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  const result = db.prepare(
+    `UPDATE gastos_recurrentes SET activo = 0 WHERE user_id = ? AND id IN (${placeholders})`
+  ).run(req.user.id, ...ids);
+  res.json({ ok: true, eliminados: result.changes });
+});
+
 // --- Ingresos recurrentes ---
 
 router.get('/ingresos', (req, res) => {

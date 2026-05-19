@@ -243,6 +243,66 @@ tr:hover td { background: var(--bg3); }
   z-index: 150;
 }
 
+/* ── Modal ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 16px;
+  animation: fadeIn 0.12s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-shell {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.15s ease-out;
+}
+@keyframes slideUp { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* ── Preview cards (IA / upload) ── */
+.preview-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  margin-bottom: 6px;
+}
+.preview-row.selected { border-color: var(--accent); background: rgba(99, 102, 241, 0.08); }
+.preview-row input.preview-monto { width: 110px; text-align: right; padding: 4px 8px; }
+.preview-row input.preview-desc { padding: 4px 8px; }
+
 /* ── Mobile (≤ 767px) ── */
 @media (max-width: 767px) {
   .mobile-topbar { display: flex; }
