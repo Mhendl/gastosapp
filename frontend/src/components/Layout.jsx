@@ -26,6 +26,7 @@ export default function Layout() {
           {[
             { to: '/', icon: '📊', label: 'Dashboard', end: true },
             { to: '/gastos', icon: '📋', label: 'Mis Gastos' },
+            { to: '/proyeccion', icon: '📅', label: 'Proyección' },
             { to: '/chat', icon: '🤖', label: 'Chat IA' },
             ...(user.rol === 'admin' ? [{ to: '/admin', icon: '⚙️', label: 'Administración' }] : [])
           ].map(item => (

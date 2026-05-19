@@ -39,6 +39,34 @@ CREATE TABLE IF NOT EXISTS chat_mensajes (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS gastos_recurrentes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  descripcion TEXT NOT NULL,
+  monto REAL NOT NULL,
+  moneda TEXT NOT NULL DEFAULT 'ARS',
+  categoria_id INTEGER,
+  tipo TEXT NOT NULL DEFAULT 'fijo',
+  cuota_actual INTEGER,
+  cuota_total INTEGER,
+  mes_referencia TEXT,
+  activo INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (categoria_id) REFERENCES categorias(id)
+);
+
+CREATE TABLE IF NOT EXISTS ingresos_recurrentes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  descripcion TEXT NOT NULL,
+  monto REAL NOT NULL,
+  moneda TEXT NOT NULL DEFAULT 'ARS',
+  activo INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 INSERT OR IGNORE INTO categorias (id, nombre, icono, color) VALUES
   (1, 'Comida', '🍔', '#f97316'),
   (2, 'Transporte', '🚗', '#3b82f6'),

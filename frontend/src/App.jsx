@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Gastos from './pages/Gastos';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
+import Proyeccion from './pages/Proyeccion';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }) {
@@ -24,6 +25,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="gastos" element={<Gastos />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="proyeccion" element={<Proyeccion />} />
           <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
         </Route>
       </Routes>

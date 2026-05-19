@@ -12,6 +12,8 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/gastos', require('./routes/gastos'));
 app.use('/api/usuarios', require('./routes/users'));
 app.use('/api/ia', require('./routes/ai'));
+app.use('/api/recurrentes', require('./routes/recurrentes'));
+app.use('/api/proyeccion', require('./routes/proyeccion'));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
