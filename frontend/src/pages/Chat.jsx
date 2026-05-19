@@ -7,6 +7,22 @@ function formatMonto(n, moneda = 'ARS') {
     : `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
 }
 
+function ConfirmacionItems({ items, color, bg, renderLabel, renderMonto }) {
+  return (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {items.map((item, j) => (
+        <div key={j} style={{
+          background: bg, border: `1px solid ${color}44`,
+          borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        }}>
+          <span style={{ fontSize: 13 }}>{renderLabel(item)}</span>
+          <span style={{ fontWeight: 700, color, fontSize: 13 }}>{renderMonto(item)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Chat() {
   const [mensajes, setMensajes] = useState([]);
   const [input, setInput] = useState('');
@@ -17,7 +33,18 @@ export default function Chat() {
 
   useEffect(() => {
     api.get('/ia/historial').then(r => {
-      setMensajes(r.data.map(m => ({ rol: m.rol, contenido: m.contenido })));
+      setMensajes(r.data.map(m => {
+        if (m.rol === 'assistant') {
+          try {
+            const match = m.contenido.match(/\{[\s\S]*\}/);
+            const parsed = JSON.parse(match ? match[0] : m.contenido);
+            return { rol: 'assistant', contenido: parsed.mensaje || m.contenido };
+          } catch {
+            return { rol: 'assistant', contenido: m.contenido };
+          }
+        }
+        return { rol: m.rol, contenido: m.contenido };
+      }));
     });
   }, []);
 
@@ -38,7 +65,9 @@ export default function Chat() {
       setMensajes(m => [...m, {
         rol: 'assistant',
         contenido: data.mensaje,
-        gastosRegistrados: data.gastosRegistrados
+        gastosRegistrados: data.gastosRegistrados,
+        recurrentesRegistrados: data.recurrentesRegistrados,
+        ingresosRegistrados: data.ingresosRegistrados,
       }]);
     } catch (err) {
       setMensajes(m => [...m, { rol: 'assistant', contenido: '❌ ' + (err.response?.data?.error || 'Error al contactar la IA') }]);
@@ -134,18 +163,20 @@ export default function Chat() {
               }}>
                 {m.contenido}
               </div>
-              {m.gastosRegistrados && m.gastosRegistrados.length > 0 && (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {m.gastosRegistrados.map((g, j) => (
-                    <div key={j} style={{
-                      background: '#14532d22', border: '1px solid #22c55e44',
-                      borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                    }}>
-                      <span>{g.categoria_icono} {g.descripcion}</span>
-                      <span style={{ fontWeight: 700, color: 'var(--success)' }}>{formatMonto(g.monto, g.moneda)}</span>
-                    </div>
-                  ))}
-                </div>
+              {m.gastosRegistrados?.length > 0 && (
+                <ConfirmacionItems items={m.gastosRegistrados} color="#22c55e" bg="#14532d22"
+                  renderLabel={g => `${g.categoria_icono || '💰'} ${g.descripcion}`}
+                  renderMonto={g => formatMonto(g.monto, g.moneda)} />
+              )}
+              {m.recurrentesRegistrados?.length > 0 && (
+                <ConfirmacionItems items={m.recurrentesRegistrados} color="#6366f1" bg="#1e1b4b22"
+                  renderLabel={g => `${g.categoria_icono || '💳'} ${g.descripcion}${g.tipo === 'cuota' ? ` (${g.cuota_actual}/${g.cuota_total})` : ' (fijo)'}`}
+                  renderMonto={g => formatMonto(g.monto, g.moneda)} />
+              )}
+              {m.ingresosRegistrados?.length > 0 && (
+                <ConfirmacionItems items={m.ingresosRegistrados} color="#f59e0b" bg="#78350f22"
+                  renderLabel={i => `💰 ${i.descripcion}`}
+                  renderMonto={i => formatMonto(i.monto, i.moneda)} />
               )}
             </div>
           </div>
