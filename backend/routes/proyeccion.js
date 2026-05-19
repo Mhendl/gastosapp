@@ -18,11 +18,9 @@ function monthDiff(fromYYYYMM, toYYYYMM) {
 }
 
 router.get('/', (req, res) => {
-  const meses = Math.min(parseInt(req.query.meses) || 12, 24);
   const userId = req.user.id;
-
   const now = new Date();
-  const mesActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const anio = parseInt(req.query.anio) || now.getFullYear();
 
   const recurrentes = db.prepare(
     `SELECT r.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
@@ -37,8 +35,8 @@ router.get('/', (req, res) => {
 
   const proyeccion = [];
 
-  for (let i = 0; i < meses; i++) {
-    const mes = addMonths(mesActual, i);
+  for (let i = 1; i <= 12; i++) {
+    const mes = `${anio}-${String(i).padStart(2, '0')}`;
 
     // Gastos recurrentes activos este mes
     const recurrentesDelMes = recurrentes.reduce((acc, g) => {

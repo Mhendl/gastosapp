@@ -36,10 +36,14 @@ const categorias = [
 const FORM_GASTO_VACIO = { descripcion: '', monto: '', moneda: 'ARS', categoria_id: '', tipo: 'fijo', cuota_actual: '', cuota_total: '', mes_referencia: mesActualStr() };
 const FORM_ING_VACIO = { descripcion: '', monto: '', moneda: 'ARS' };
 
+const anioActual = new Date().getFullYear();
+const mesActual = mesActualStr();
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [mesSel, setMesSel] = useState(mesActualStr());
+  const [anio, setAnio] = useState(anioActual);
+  const [mesSel, setMesSel] = useState(mesActual);
   const [vista, setVista] = useState('mes'); // 'mes' | 'config'
   const [formGasto, setFormGasto] = useState(FORM_GASTO_VACIO);
   const [formIng, setFormIng] = useState(FORM_ING_VACIO);
@@ -50,12 +54,21 @@ export default function Dashboard() {
 
   const cargar = useCallback(() => {
     setLoading(true);
-    api.get('/proyeccion?meses=12')
+    api.get(`/proyeccion?anio=${anio}`)
       .then(r => setData(r.data))
       .finally(() => setLoading(false));
-  }, []);
+  }, [anio]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Al cambiar año, seleccionar enero de ese año (o mes actual si es el año actual)
+  useEffect(() => {
+    if (anio === anioActual) {
+      setMesSel(mesActual);
+    } else {
+      setMesSel(`${anio}-01`);
+    }
+  }, [anio]);
 
   const mesData = data?.proyeccion?.find(m => m.mes === mesSel);
   const meses = data?.proyeccion?.map(m => m.mes) || [];
@@ -156,33 +169,41 @@ export default function Dashboard() {
         <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><span className="spin" /></div>
       ) : vista === 'mes' ? (
         <>
-          {/* Tabs de meses */}
-          <div style={{ overflowX: 'auto', marginBottom: 20 }}>
-            <div style={{ display: 'flex', gap: 6, minWidth: 'max-content', borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-              {meses.map(m => {
-                const md = data.proyeccion.find(x => x.mes === m);
-                const balance = md?.balanceARS ?? 0;
-                const activo = m === mesSel;
-                return (
-                  <button key={m} onClick={() => setMesSel(m)}
-                    style={{
-                      padding: '8px 16px', border: 'none', cursor: 'pointer', borderRadius: '8px 8px 0 0',
-                      background: activo ? 'var(--bg2)' : 'transparent',
-                      borderBottom: activo ? '2px solid var(--accent)' : '2px solid transparent',
-                      marginBottom: -2, transition: 'all 0.15s', textAlign: 'center', minWidth: 80
-                    }}>
-                    <div style={{ fontSize: 12, fontWeight: activo ? 700 : 400, color: activo ? 'var(--accent)' : 'var(--text2)' }}>
-                      {mesLabel(m, true)}
+          {/* Selector de año */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <button className="btn btn-ghost" style={{ padding: '4px 10px' }}
+              onClick={() => setAnio(a => a - 1)}>‹</button>
+            <span style={{ fontWeight: 700, fontSize: 18, minWidth: 60, textAlign: 'center' }}>{anio}</span>
+            <button className="btn btn-ghost" style={{ padding: '4px 10px' }}
+              onClick={() => setAnio(a => a + 1)}>›</button>
+          </div>
+
+          {/* Tabs de los 12 meses */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4, marginBottom: 20 }}>
+            {meses.map(m => {
+              const md = data.proyeccion.find(x => x.mes === m);
+              const balance = md?.balanceARS ?? 0;
+              const activo = m === mesSel;
+              const esHoy = m === mesActual;
+              return (
+                <button key={m} onClick={() => setMesSel(m)}
+                  style={{
+                    padding: '8px 4px', border: esHoy ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    cursor: 'pointer', borderRadius: 8, textAlign: 'center',
+                    background: activo ? 'var(--accent)' : 'var(--bg2)',
+                    transition: 'all 0.15s',
+                  }}>
+                  <div style={{ fontSize: 12, fontWeight: activo ? 700 : 500, color: activo ? 'white' : 'var(--text)' }}>
+                    {MESES_CORTOS[parseInt(m.split('-')[1]) - 1]}
+                  </div>
+                  {md && (md.ingresoARS > 0 || md.totalARS > 0) && (
+                    <div style={{ fontSize: 10, marginTop: 3, color: activo ? 'rgba(255,255,255,0.85)' : (balance >= 0 ? 'var(--success)' : 'var(--danger)') }}>
+                      {balance >= 0 ? '+' : ''}{Math.round(balance / 1000)}k
                     </div>
-                    {md && (md.ingresoARS > 0 || md.totalARS > 0) && (
-                      <div style={{ fontSize: 10, color: balance >= 0 ? 'var(--success)' : 'var(--danger)', marginTop: 2 }}>
-                        {balance >= 0 ? '+' : ''}{(balance / 1000).toFixed(0)}k
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <VistaMes mes={mesSel} data={mesData} onEditarGasto={editarGasto} onEditarIng={editarIng} onRecargar={cargar} />
