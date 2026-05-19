@@ -47,7 +47,7 @@ router.get('/resumen', (req, res) => {
 
   const totales = db.prepare(`
     SELECT moneda, SUM(monto) as total, COUNT(*) as cantidad
-    FROM gastos WHERE user_id = ? ${filtroFecha}
+    FROM gastos g WHERE user_id = ? ${filtroFecha}
     GROUP BY moneda
   `).all(req.user.id);
 
