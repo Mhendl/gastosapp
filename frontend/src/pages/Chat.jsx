@@ -402,7 +402,7 @@ function ItemPreview({ item, tipo, tabla, selected, onToggle, onChange, editable
           <div style={{ display: 'flex', gap: 4 }}>
             <input
               className="preview-monto"
-              type="number" min="0" step="0.01"
+              type="number" step="0.01"
               value={item.monto}
               onChange={e => onChange('monto', parseFloat(e.target.value) || 0)}
             />
@@ -413,7 +413,9 @@ function ItemPreview({ item, tipo, tabla, selected, onToggle, onChange, editable
             </select>
           </div>
         ) : (
-          <span style={{ fontWeight: 700, color: 'var(--success)' }}>{fmt(item.monto, item.moneda)}</span>
+          <span style={{ fontWeight: 700, color: item.monto < 0 ? 'var(--success)' : 'var(--danger)' }}>
+            {item.monto < 0 ? '+' : ''}{fmt(Math.abs(item.monto), item.moneda)}
+          </span>
         )}
       </div>
     </div>

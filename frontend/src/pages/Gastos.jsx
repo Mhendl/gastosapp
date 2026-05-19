@@ -3,9 +3,11 @@ import api from '../services/api';
 import Modal, { ConfirmModal } from '../components/Modal';
 
 function formatMonto(n, moneda = 'ARS') {
-  return moneda === 'USD'
-    ? `USD ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  const abs = Math.abs(Number(n));
+  const str = moneda === 'USD'
+    ? `USD ${abs.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+    : `$${abs.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  return n < 0 ? `+${str}` : str;
 }
 
 const MONEDAS = ['ARS', 'USD', 'EUR'];
@@ -210,7 +212,7 @@ export default function Gastos() {
                         </span>
                       )}
                     </td>
-                    <td style={{ fontWeight: 700, color: 'var(--success)', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatMonto(g.monto, g.moneda)}</td>
+                    <td style={{ fontWeight: 700, color: g.monto < 0 ? 'var(--success)' : 'var(--text)', whiteSpace: 'nowrap', textAlign: 'right' }}>{formatMonto(g.monto, g.moneda)}</td>
                     <td><span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: ob.bg, color: ob.color }}>{ob.label}</span></td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>

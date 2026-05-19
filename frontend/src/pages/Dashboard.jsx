@@ -388,12 +388,14 @@ function VistaMes({ data, onEditarGasto, onEditarIng, onBorrarGasto, onBorrarRec
                 const subFecha = g.mes_cierre && g.fecha && g.fecha.slice(0, 7) !== g.mes_cierre
                   ? `${g.fecha} · resumen tarjeta`
                   : g.fecha;
+                const esDev = g.monto < 0;
                 return (
                   <FilaItem key={g.id}
-                    icono={g.categoria_icono || '💰'}
+                    icono={esDev ? '↩️' : (g.categoria_icono || '💰')}
                     nombre={g.descripcion}
                     sub={subFecha}
-                    monto={fmt(g.monto, g.moneda)}
+                    monto={(esDev ? '+' : '') + fmt(Math.abs(g.monto), g.moneda)}
+                    colorMonto={esDev ? 'var(--success)' : undefined}
                     onEliminar={() => onBorrarGasto(g)} />
                 );
               })}

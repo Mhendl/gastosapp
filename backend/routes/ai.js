@@ -148,7 +148,7 @@ REGLAS GENERALES:
 - SIEMPRE respondés con JSON puro, sin texto antes ni después.
 - Moneda por defecto: ARS. Si dicen dólares/USD/u$s → "USD".
 - Fecha por defecto: hoy (${ctx.hoy}).
-- Los montos son números positivos sin separadores de miles.
+- Los montos son números sin separadores de miles. Usá monto POSITIVO para gastos normales, y monto NEGATIVO solo para devoluciones/reintegros/anulaciones (ej: "me devolvieron 5000 de GitHub" → monto: -5000, descripcion: "GitHub (devolución)").
 - Si te faltan datos importantes (cuota actual y total cuando habla de cuotas) → preguntá con accion "consulta".
 
 ---
@@ -503,7 +503,11 @@ REGLAS DE EXTRACCIÓN (resumen Banco Nación / Visa):
    - Impuestos y percepciones: "IIBB", "IVA RG 4240", "IVA RG", "DB.RG", "DB IVA", "PERCEP-CABA"
    - Líneas de cabecera/pie: "PROXIMO CIERRE", "Tarjeta XXXX Total"
 
-9) IGNORAR REVERSIONES: si un monto termina con guión ("22,23-", "2.388,70-") es un crédito/devolución. NO incluirlo. Si una compra y su reversión aparecen en el mismo resumen, omití AMBAS.
+9) REVERSIONES / DEVOLUCIONES: si un monto termina con guión ("22,23-", "2.388,70-") es un crédito/devolución (ej: una queja, un reintegro, una compra anulada). INCLUILA como gasto con MONTO NEGATIVO.
+   - En la descripción agregá " (devolución)" al final para que el usuario vea claramente que es una resta.
+   - Ej línea "22.04.26 462074K GITHUB, INC. USD 22,23 22,23-" → gasto USD -22.23 descripcion="GitHub (devolución)" fecha="2026-04-22".
+   - Conservás TAMBIÉN la compra original si aparece (no las cancelás entre sí).
+   - EXCEPCIÓN: las líneas "SU PAGO EN PESOS" o "SU PAGO EN DOLARES" NO son devoluciones, son pagos que vos hiciste a la tarjeta. Esas se siguen IGNORANDO (no las devuelvas).
 
 10) Limpiá la descripción: sacá prefijos como "MERPAGO*", "PAYU*AR*", "DLO*", "WL *", asteriscos sueltos, IDs largos al final ("P88798458USD", "C43IK05n4dtw8xxmq1"). Dejá nombre limpio.
     Ejemplos:
