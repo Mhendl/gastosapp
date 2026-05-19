@@ -8,3 +8,4 @@ backend/uploads/*
 *.log
 dist/
 .DS_Store
+.ssh_check.py

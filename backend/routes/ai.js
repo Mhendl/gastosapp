@@ -475,51 +475,67 @@ ${texto.slice(0, 12000)}
 """
 
 REGLAS DE EXTRACCIÓN (resumen Banco Nación / Visa):
-- Cada línea de transacción tiene formato:
-  FECHA(DD.MM.AA) CODIGO_COMPROBANTE DESCRIPCION [Cuota X/Y] MONTO_PESOS [MONTO_DOLARES]
-  Ej: "14.05.25  007699* MULTIPOINT S.A.        Cuota 13/24      20.249,95"
-  Ej: "20.04.26  006281* SUPREMITAS                               55.496,00"
-  Ej: "22.04.26  161641  CLAUDE.AI SUBSCR in1TP4JzB USD 20,00    20,00"
+1) Primero detectá el campo "CIERRE ACTUAL" (ej: "CIERRE ACTUAL: 14 May 26"). Convertilo a YYYY-MM y devolvelo como "cierre" en el JSON final (ej "2026-05"). Si no encontrás cierre, usá "${mes}".
 
-- Si en la línea aparece "Cuota X/Y" → es una CUOTA:
-    tipo: "cuota", cuota_actual=X, cuota_total=Y
-    mes_referencia = mes del cierre del resumen (${mes})
-    Va en "recurrentes"
-- Si NO tiene "Cuota" → es un gasto puntual del mes del cierre. Va en "gastosUnicos".
-    fecha = la fecha de la columna FECHA convertida a YYYY-MM-DD (DD.MM.AA → 20AA-MM-DD)
-- Monto: los formatos son "20.249,95" (punto miles, coma decimal). Devolver como número 20249.95.
-- Monedas: las dos últimas columnas son ARS y USD. Si el ARS está vacío y el USD tiene valor → moneda="USD", monto = valor USD.
-- IGNORAR (NO devolver): líneas con "SALDO ANTERIOR", "SU PAGO", "TOTAL", "IIBB", "IVA RG", "DB.RG", "DB IVA", "VISA PLAN V" (es interés/financiación), "PROXIMO CIERRE", "Tarjeta XXXX Total".
-- IGNORAR REVERSIONES: si un monto termina con guión ("22,23-" o "2.388,70-") es un crédito/devolución. NO incluirlo. Si una compra y su reversión aparecen el mismo mes, omití AMBAS.
-- Limpiá la descripción: sacá códigos como "MERPAGO*", "PAYU*AR*", "DLO*", "WL *", asteriscos sueltos, IDs largos al final ("P88798458USD", "C43IK05n4dtw8xxmq1"). Dejá nombre limpio.
-  Ejemplos de limpieza:
-    "MERPAGO*COTO" → "COTO"
-    "PAYU*AR*UBER" → "UBER"
-    "DLO*DiDi" → "DiDi"
-    "GOOGLE *YouTubeP P1l3fnbG" → "YouTube Premium"
-    "NETFLIX.COM C43IK05n4dtw8xxmq1" → "Netflix"
-    "WL *Steam Purchase" → "Steam"
+2) Cada línea de transacción tiene formato:
+   FECHA(DD.MM.AA) COMPROBANTE DESCRIPCION [Cuota X/Y] MONTO_PESOS [MONTO_DOLARES]
+   Ej: "14.05.25  007699* MULTIPOINT S.A.        Cuota 13/24      20.249,95"
+   Ej: "20.04.26  006281* SUPREMITAS                               55.496,00"
+   Ej: "22.04.26  161641  CLAUDE.AI SUBSCR USD 20,00              20,00"
+   El "COMPROBANTE" es el código alfanumérico que va antes de la descripción (ej "007699*", "006281*", "161641", "956809K"). Capturalo TAL CUAL.
+
+3) Si en la línea aparece "Cuota X/Y" → es una CUOTA:
+     tipo: "cuota", cuota_actual=X, cuota_total=Y, mes_referencia = cierre (YYYY-MM)
+     Va en "recurrentes"
+
+4) Si NO tiene "Cuota" → es un gasto puntual. Va en "gastosUnicos".
+     fecha = la fecha de la columna FECHA convertida a YYYY-MM-DD (DD.MM.AA → 20AA-MM-DD)
+     IMPORTANTE: el campo "mes_cierre" del gasto = el cierre detectado en el paso 1 (todos los gastos del resumen tienen el MISMO mes_cierre).
+
+5) Monto: formato "20.249,95" (punto miles, coma decimal) → 20249.95.
+
+6) Monedas: las dos últimas columnas son ARS y USD. Si la columna ARS está vacía y la USD tiene valor → moneda="USD", monto = valor USD.
+
+7) "VISA PLAN V" (interés/financiación, ej "VISA PLAN V 8-09 (TNA 79,01)"): INCLUILO como gasto puntual en "gastosUnicos" con descripcion="Interés Plan V", categoria_id=3 (Servicios) y fecha = la fecha de la línea. NO lo metas en "recurrentes". El usuario después decide si lo registra o no.
+
+8) IGNORAR (NO devolver) todo esto:
+   - "SALDO ANTERIOR", "SU PAGO", líneas con "TOTAL"
+   - Impuestos y percepciones: "IIBB", "IVA RG 4240", "IVA RG", "DB.RG", "DB IVA", "PERCEP-CABA"
+   - Líneas de cabecera/pie: "PROXIMO CIERRE", "Tarjeta XXXX Total"
+
+9) IGNORAR REVERSIONES: si un monto termina con guión ("22,23-", "2.388,70-") es un crédito/devolución. NO incluirlo. Si una compra y su reversión aparecen en el mismo resumen, omití AMBAS.
+
+10) Limpiá la descripción: sacá prefijos como "MERPAGO*", "PAYU*AR*", "DLO*", "WL *", asteriscos sueltos, IDs largos al final ("P88798458USD", "C43IK05n4dtw8xxmq1"). Dejá nombre limpio.
+    Ejemplos:
+      "MERPAGO*COTO" → "COTO"
+      "PAYU*AR*UBER" → "UBER"
+      "DLO*DiDi" → "DiDi"
+      "GOOGLE *YouTubeP P1l3fnbG" → "YouTube Premium"
+      "NETFLIX.COM C43IK05n4dtw8xxmq1" → "Netflix"
+      "WL *Steam Purchase" → "Steam"
 
 CATEGORÍAS DISPONIBLES (id: nombre):
 ${categoriasStr}
 
-- Asigná la categoría más apropiada por nombre/contexto:
+- Asigná la categoría más apropiada:
     Comida/Restaurantes → 1
     Uber/Didi/transporte → 2
-    Servicios (Spotify, Netflix, YouTube, Google, hosting, ESET) → 3 ó 5 (entretenimiento)
+    Servicios (Spotify, Netflix, YouTube, Google, hosting, ESET, interés Plan V) → 3
+    Entretenimiento (Steam, juegos) → 5
     Supermercado (Coto, Carrefour, Día) → 6
-    Cuotas o tarjeta sin categoría clara → 10
+    Cuotas/Tarjeta sin categoría clara → 10
 
 RESPONDÉ con JSON ESTRICTO así:
 {
+  "cierre": "${mes}",
   "recurrentes": [
-    {"descripcion":"MULTIPOINT","monto":20249.95,"moneda":"ARS","categoria_id":10,
+    {"comprobante":"007699*","descripcion":"MULTIPOINT","monto":20249.95,"moneda":"ARS","categoria_id":10,
      "tipo":"cuota","cuota_actual":13,"cuota_total":24,"mes_referencia":"${mes}"}
   ],
   "gastosUnicos": [
-    {"descripcion":"Uber","monto":18661,"moneda":"ARS","categoria_id":2,"fecha":"2026-04-18","notas":""}
+    {"comprobante":"004935K","descripcion":"Uber","monto":18661,"moneda":"ARS","categoria_id":2,"fecha":"2026-04-18","mes_cierre":"${mes}","notas":""}
   ],
-  "resumen":"X cuotas y Y gastos detectados en el resumen"
+  "resumen":"X cuotas y Y gastos detectados en el resumen del cierre YYYY-MM"
 }`;
 
 router.post('/upload', upload.single('archivo'), async (req, res) => {
@@ -569,32 +585,78 @@ router.post('/upload', upload.single('archivo'), async (req, res) => {
     try { parsed = JSON.parse(completion.choices[0].message.content); }
     catch { return res.status(500).json({ error: 'No se pudo parsear la respuesta de la IA' }); }
 
-    // Normalizamos a items con _id para que el frontend los pueda manipular
-    const recurrentes = (parsed.recurrentes || []).filter(r => r.monto && r.descripcion).map((r, i) => ({
-      _id: `r${i}`,
-      descripcion: r.descripcion,
-      monto: parseFloat(r.monto),
-      moneda: r.moneda || 'ARS',
-      categoria_id: r.categoria_id || 10,
-      tipo: r.tipo === 'fijo' ? 'fijo' : 'cuota',
-      cuota_actual: r.cuota_actual || null,
-      cuota_total: r.cuota_total || null,
-      mes_referencia: r.mes_referencia || mesActual()
-    }));
+    const cierre = parsed.cierre || mesActual();
+    const userId = req.user.id;
 
-    const gastos = (parsed.gastosUnicos || []).filter(g => g.monto && g.descripcion).map((g, i) => ({
-      _id: `g${i}`,
-      descripcion: g.descripcion,
-      monto: parseFloat(g.monto),
-      moneda: g.moneda || 'ARS',
-      categoria_id: g.categoria_id || null,
-      fecha: g.fecha || fechaHoy(),
-      notas: g.notas || null
-    }));
+    // Helpers de duplicado
+    const findGastoDup = (item) => {
+      // Prioridad 1: por comprobante (única identidad confiable)
+      if (item.comprobante) {
+        const r = db.prepare(
+          'SELECT id, fecha FROM gastos WHERE user_id = ? AND comprobante = ? LIMIT 1'
+        ).get(userId, item.comprobante);
+        if (r) return r;
+      }
+      // Fallback: misma descripción + monto + fecha (mismo día, descripción exacta)
+      return db.prepare(
+        `SELECT id, fecha FROM gastos
+         WHERE user_id = ? AND lower(descripcion) = lower(?) AND monto = ? AND fecha = ? LIMIT 1`
+      ).get(userId, item.descripcion, parseFloat(item.monto), item.fecha);
+    };
+    const findRecDup = (item) => {
+      if (item.comprobante) {
+        const r = db.prepare(
+          'SELECT id FROM gastos_recurrentes WHERE user_id = ? AND comprobante = ? AND activo = 1 LIMIT 1'
+        ).get(userId, item.comprobante);
+        if (r) return r;
+      }
+      return db.prepare(
+        `SELECT id FROM gastos_recurrentes
+         WHERE user_id = ? AND activo = 1 AND lower(descripcion) = lower(?)
+           AND cuota_actual = ? AND cuota_total = ? LIMIT 1`
+      ).get(userId, item.descripcion, item.cuota_actual || null, item.cuota_total || null);
+    };
 
+    // Normalizamos y marcamos duplicados
+    const recurrentes = (parsed.recurrentes || []).filter(r => r.monto && r.descripcion).map((r, i) => {
+      const item = {
+        _id: `r${i}`,
+        comprobante: r.comprobante || null,
+        descripcion: r.descripcion,
+        monto: parseFloat(r.monto),
+        moneda: r.moneda || 'ARS',
+        categoria_id: r.categoria_id || 10,
+        tipo: r.tipo === 'fijo' ? 'fijo' : 'cuota',
+        cuota_actual: r.cuota_actual || null,
+        cuota_total: r.cuota_total || null,
+        mes_referencia: r.mes_referencia || cierre
+      };
+      const dup = findRecDup(item);
+      if (dup) item.duplicado = true;
+      return item;
+    });
+
+    const gastos = (parsed.gastosUnicos || []).filter(g => g.monto && g.descripcion).map((g, i) => {
+      const item = {
+        _id: `g${i}`,
+        comprobante: g.comprobante || null,
+        descripcion: g.descripcion,
+        monto: parseFloat(g.monto),
+        moneda: g.moneda || 'ARS',
+        categoria_id: g.categoria_id || null,
+        fecha: g.fecha || fechaHoy(),
+        mes_cierre: g.mes_cierre || cierre,
+        notas: g.notas || null
+      };
+      const dup = findGastoDup(item);
+      if (dup) item.duplicado = true;
+      return item;
+    });
+
+    const numDup = recurrentes.filter(r => r.duplicado).length + gastos.filter(g => g.duplicado).length;
     res.json({
-      preview: { recurrentes, gastos },
-      resumen: parsed.resumen || `${recurrentes.length} cuotas + ${gastos.length} gastos detectados`
+      preview: { recurrentes, gastos, cierre },
+      resumen: parsed.resumen || `${recurrentes.length} cuotas + ${gastos.length} gastos detectados (cierre ${cierre}${numDup ? `, ${numDup} duplicados` : ''})`
     });
   } catch (err) {
     if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -614,11 +676,12 @@ router.post('/upload/aplicar', (req, res) => {
     for (const r of recurrentes) {
       if (!r.monto || !r.descripcion) continue;
       const result = db.prepare(
-        `INSERT INTO gastos_recurrentes (user_id, descripcion, monto, moneda, categoria_id, tipo, cuota_actual, cuota_total, mes_referencia)
-         VALUES (?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO gastos_recurrentes (user_id, descripcion, monto, moneda, categoria_id, tipo, cuota_actual, cuota_total, mes_referencia, comprobante)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`
       ).run(userId, r.descripcion, parseFloat(r.monto), r.moneda || 'ARS',
         r.categoria_id || 10, r.tipo || 'cuota',
-        r.cuota_actual || null, r.cuota_total || null, r.mes_referencia || mesActual());
+        r.cuota_actual || null, r.cuota_total || null, r.mes_referencia || mesActual(),
+        r.comprobante || null);
       insertadosRec.push(db.prepare(
         `SELECT rec.*, c.nombre as categoria_nombre, c.icono as categoria_icono
          FROM gastos_recurrentes rec LEFT JOIN categorias c ON c.id = rec.categoria_id WHERE rec.id = ?`
@@ -627,10 +690,11 @@ router.post('/upload/aplicar', (req, res) => {
     for (const g of gastos) {
       if (!g.monto || !g.descripcion) continue;
       const result = db.prepare(
-        `INSERT INTO gastos (user_id, descripcion, monto, moneda, categoria_id, fecha, notas, origen)
-         VALUES (?,?,?,?,?,?,?,'archivo')`
+        `INSERT INTO gastos (user_id, descripcion, monto, moneda, categoria_id, fecha, notas, origen, mes_cierre, comprobante)
+         VALUES (?,?,?,?,?,?,?,'archivo',?,?)`
       ).run(userId, g.descripcion, parseFloat(g.monto), g.moneda || 'ARS',
-        g.categoria_id || null, g.fecha || fechaHoy(), g.notas || null);
+        g.categoria_id || null, g.fecha || fechaHoy(), g.notas || null,
+        g.mes_cierre || null, g.comprobante || null);
       insertadosGas.push(db.prepare(
         `SELECT g.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
          FROM gastos g LEFT JOIN categorias c ON c.id = g.categoria_id WHERE g.id = ?`

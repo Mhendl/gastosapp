@@ -300,6 +300,8 @@ tr:hover td { background: var(--bg3); }
   margin-bottom: 6px;
 }
 .preview-row.selected { border-color: var(--accent); background: rgba(99, 102, 241, 0.08); }
+.preview-row.is-dup { background: rgba(245, 158, 11, 0.06); border-color: rgba(245, 158, 11, 0.4); }
+.preview-row.is-dup.selected { background: rgba(245, 158, 11, 0.15); border-color: var(--warning); }
 .preview-row input.preview-monto { width: 110px; text-align: right; padding: 4px 8px; }
 .preview-row input.preview-desc { padding: 4px 8px; }
 

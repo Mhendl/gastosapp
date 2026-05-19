@@ -30,8 +30,9 @@ router.get('/', (req, res) => {
 // Resumen por categoría y totales
 router.get('/resumen', (req, res) => {
   const { mes, anio } = req.query;
+  // Agrupamos por mes_cierre si existe (gastos del resumen) sino por fecha real
   const filtroFecha = mes && anio
-    ? `AND strftime('%Y-%m', g.fecha) = '${anio}-${mes.padStart(2, '0')}'`
+    ? `AND COALESCE(g.mes_cierre, strftime('%Y-%m', g.fecha)) = '${anio}-${mes.padStart(2, '0')}'`
     : '';
 
   const porCategoria = db.prepare(`
@@ -51,7 +52,7 @@ router.get('/resumen', (req, res) => {
   `).all(req.user.id);
 
   const porMes = db.prepare(`
-    SELECT strftime('%Y-%m', fecha) as mes, moneda, SUM(monto) as total
+    SELECT COALESCE(mes_cierre, strftime('%Y-%m', fecha)) as mes, moneda, SUM(monto) as total
     FROM gastos WHERE user_id = ?
     GROUP BY mes, moneda ORDER BY mes DESC LIMIT 24
   `).all(req.user.id);
@@ -61,20 +62,22 @@ router.get('/resumen', (req, res) => {
 
 // Crear gasto manual
 router.post('/', (req, res) => {
-  const { descripcion, monto, moneda = 'ARS', categoria_id, fecha, notas, origen } = req.body;
+  const { descripcion, monto, moneda = 'ARS', categoria_id, fecha, notas, origen, mes_cierre, comprobante } = req.body;
   if (!descripcion || !monto) {
     return res.status(400).json({ error: 'Descripción y monto requeridos' });
   }
 
   const result = db.prepare(
-    `INSERT INTO gastos (user_id, descripcion, monto, moneda, categoria_id, fecha, notas, origen)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO gastos (user_id, descripcion, monto, moneda, categoria_id, fecha, notas, origen, mes_cierre, comprobante)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     req.user.id, descripcion, parseFloat(monto), moneda,
     categoria_id || null,
     fecha || new Date().toISOString().split('T')[0],
     notas || null,
-    origen || 'manual'
+    origen || 'manual',
+    mes_cierre || null,
+    comprobante || null
   );
 
   const gasto = db.prepare(
@@ -90,9 +93,9 @@ router.put('/:id', (req, res) => {
   const gasto = db.prepare('SELECT * FROM gastos WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!gasto) return res.status(404).json({ error: 'Gasto no encontrado' });
 
-  const { descripcion, monto, moneda, categoria_id, fecha, notas } = req.body;
+  const { descripcion, monto, moneda, categoria_id, fecha, notas, mes_cierre } = req.body;
   db.prepare(
-    `UPDATE gastos SET descripcion=?, monto=?, moneda=?, categoria_id=?, fecha=?, notas=? WHERE id=?`
+    `UPDATE gastos SET descripcion=?, monto=?, moneda=?, categoria_id=?, fecha=?, notas=?, mes_cierre=? WHERE id=?`
   ).run(
     descripcion ?? gasto.descripcion,
     monto !== undefined ? parseFloat(monto) : gasto.monto,
@@ -100,6 +103,7 @@ router.put('/:id', (req, res) => {
     categoria_id !== undefined ? categoria_id : gasto.categoria_id,
     fecha ?? gasto.fecha,
     notas !== undefined ? notas : gasto.notas,
+    mes_cierre !== undefined ? mes_cierre : gasto.mes_cierre,
     req.params.id
   );
 

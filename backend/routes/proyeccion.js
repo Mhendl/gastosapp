@@ -54,11 +54,14 @@ router.get('/', (req, res) => {
       return acc;
     }, []);
 
-    // Gastos registrados (uno a uno) para este mes
+    // Gastos registrados para este mes:
+    //   - Si vienen de un resumen de tarjeta tienen mes_cierre → agrupar por ahí
+    //   - Si no, por su fecha de transacción
     const gastosRegistrados = db.prepare(
       `SELECT g.*, c.nombre as categoria_nombre, c.icono as categoria_icono, c.color as categoria_color
        FROM gastos g LEFT JOIN categorias c ON c.id = g.categoria_id
-       WHERE g.user_id = ? AND strftime('%Y-%m', g.fecha) = ?
+       WHERE g.user_id = ?
+         AND COALESCE(g.mes_cierre, strftime('%Y-%m', g.fecha)) = ?
        ORDER BY g.fecha DESC`
     ).all(userId, mes);
 

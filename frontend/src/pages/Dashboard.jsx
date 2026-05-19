@@ -384,14 +384,19 @@ function VistaMes({ data, onEditarGasto, onEditarIng, onBorrarGasto, onBorrarRec
 
           {gastosRegistrados.length > 0 && (
             <Seccion titulo="🧾 Gastos del mes (registrados)">
-              {gastosRegistrados.map(g => (
-                <FilaItem key={g.id}
-                  icono={g.categoria_icono || '💰'}
-                  nombre={g.descripcion}
-                  sub={g.fecha}
-                  monto={fmt(g.monto, g.moneda)}
-                  onEliminar={() => onBorrarGasto(g)} />
-              ))}
+              {gastosRegistrados.map(g => {
+                const subFecha = g.mes_cierre && g.fecha && g.fecha.slice(0, 7) !== g.mes_cierre
+                  ? `${g.fecha} · resumen tarjeta`
+                  : g.fecha;
+                return (
+                  <FilaItem key={g.id}
+                    icono={g.categoria_icono || '💰'}
+                    nombre={g.descripcion}
+                    sub={subFecha}
+                    monto={fmt(g.monto, g.moneda)}
+                    onEliminar={() => onBorrarGasto(g)} />
+                );
+              })}
               <TotalFila label="Total registrados" total={gastosRegistrados.filter(g => g.moneda === 'ARS').reduce((s, g) => s + g.monto, 0)} />
             </Seccion>
           )}

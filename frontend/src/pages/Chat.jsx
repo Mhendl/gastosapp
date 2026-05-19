@@ -333,9 +333,14 @@ function ItemPreview({ item, tipo, tabla, selected, onToggle, onChange, editable
   const esIngreso = tipo === 'registrar_ingreso';
 
   return (
-    <div className={`preview-row ${selected ? 'selected' : ''}`}>
+    <div className={`preview-row ${selected ? 'selected' : ''} ${item.duplicado ? 'is-dup' : ''}`}>
       <input type="checkbox" checked={selected} onChange={onToggle} />
       <div style={{ minWidth: 0 }}>
+        {item.duplicado && (
+          <div style={{ fontSize: 10, color: 'var(--warning)', fontWeight: 700, marginBottom: 2, letterSpacing: 0.5 }}>
+            ⚠️ YA EXISTE EN LA BASE
+          </div>
+        )}
         {editable ? (
           <input
             className="preview-desc"
@@ -428,8 +433,9 @@ function PreviewArchivoModal({ preview, onCancel, onAplicar }) {
     if (!preview) return;
     setRec(preview.recurrentes || []);
     setGas(preview.gastos || []);
-    setSelRec(new Set((preview.recurrentes || []).map(r => r._id)));
-    setSelGas(new Set((preview.gastos || []).map(g => g._id)));
+    // Por defecto destildamos los duplicados (el usuario los puede volver a tildar si quiere)
+    setSelRec(new Set((preview.recurrentes || []).filter(r => !r.duplicado).map(r => r._id)));
+    setSelGas(new Set((preview.gastos || []).filter(g => !g.duplicado).map(g => g._id)));
   }, [preview]);
 
   if (!preview) return null;
@@ -453,13 +459,14 @@ function PreviewArchivoModal({ preview, onCancel, onAplicar }) {
   }
 
   const totalSel = selRec.size + selGas.size;
+  const numDup = rec.filter(r => r.duplicado).length + gas.filter(g => g.duplicado).length;
 
   return (
     <Modal
       open={!!preview}
       onClose={onCancel}
-      title="📋 Revisar movimientos detectados"
-      width={720}
+      title={`📋 Revisar movimientos${preview.cierre ? ` — cierre ${preview.cierre}` : ''}`}
+      width={760}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onCancel} disabled={aplicando}>Cancelar</button>
@@ -470,7 +477,14 @@ function PreviewArchivoModal({ preview, onCancel, onAplicar }) {
       }
     >
       <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 12 }}>
-        Revisá lo que la IA detectó del archivo. Podés editar montos/categorías o destildar los que no quieras cargar.
+        Revisá lo que la IA detectó del archivo. Editá montos/categorías o destildá los que no quieras cargar.
+        {numDup > 0 && (
+          <><br />
+            <span style={{ color: 'var(--warning)' }}>
+              ⚠️ {numDup} item{numDup !== 1 ? 's' : ''} ya existe{numDup !== 1 ? 'n' : ''} en la base. Los destildé por defecto.
+            </span>
+          </>
+        )}
       </p>
 
       {rec.length > 0 && (

@@ -193,7 +193,12 @@ export default function Gastos() {
                     <td>
                       <input type="checkbox" checked={sel} onChange={() => toggleSel(g.id)} />
                     </td>
-                    <td style={{ color: 'var(--text2)', whiteSpace: 'nowrap' }}>{g.fecha}</td>
+                    <td style={{ color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+                      {g.fecha}
+                      {g.mes_cierre && g.fecha?.slice(0, 7) !== g.mes_cierre && (
+                        <div style={{ fontSize: 10, color: 'var(--warning)' }}>cierre {g.mes_cierre}</div>
+                      )}
+                    </td>
                     <td>
                       <div style={{ fontWeight: 500 }}>{g.descripcion}</div>
                       {g.notas && <div style={{ fontSize: 12, color: 'var(--text2)' }}>{g.notas}</div>}
